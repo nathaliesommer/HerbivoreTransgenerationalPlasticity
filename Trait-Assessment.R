@@ -522,8 +522,14 @@ temperature_plot <- ggplot(behavior_data, aes(x = Nearest_Temperature, y = Y, co
 
 # Display all plots
 aggregated_plot
-behavior_plot #cool site origin
-physiology_plot # warm site origin
+
+# Create the individual plots for cool-site and warm-site origins
+behavior_plot <- create_single_panel_plot(behavior_data, "Cool-site origin")
+physiology_plot <- create_single_panel_plot(behavior_data, "Warm-site origin")
+
+# Display the plots
+behavior_plot
+physiology_plot
 temperature_plot
 
 
@@ -644,11 +650,16 @@ respiration_data <- respiration_data %>%
 
 # Cleaning
 respiration_data <- respiration_data %>%
-  dplyr::mutate(Generation = case_when(
-    Generation == 1 ~ "G1",
-    Generation == 2 ~ "G2",
-    TRUE ~ as.character(Generation)
-  )) %>%
+  dplyr::mutate(
+    # Convert Generation to G1/G2 format
+    Generation = case_when(
+      Generation == "1" ~ "G1",
+      Generation == "2" ~ "G2",
+      Generation == 1 ~ "G1",  # Handle numeric values
+      Generation == 2 ~ "G2",  # Handle numeric values
+      TRUE ~ as.character(Generation)
+    )
+  ) %>%
   dplyr::filter(
     Exclude != 1
   ) %>%
@@ -661,18 +672,35 @@ respiration_data <- respiration_data %>%
                 Mass) %>%
   dplyr::rename(Temp = Temp_Catagorical)
 
+# Ensure proper factor levels and data types
 respiration_data <- respiration_data %>%
-  mutate(Treatment = paste(Generation, Predation, sep = "_")) %>%
-  mutate(Treatment = factor(Treatment, 
-                            levels = c("G1_Herbivore", "G2_Herbivore", 
-                                       "G1_Predator", "G2_Predator"))) %>% 
-  mutate(Type = case_when(
-    Population %in% c("MC", "FN", "HF") ~ "Behavior",
-    Population %in% c("DC", "SP", "SC") ~ "Physiology"))
+  mutate(
+    Generation = factor(Generation, levels = c("G1", "G2")),
+    Treatment = paste(Generation, Predation, sep = "_"),
+    Treatment = factor(Treatment, 
+                      levels = c("G1_Herbivore", "G2_Herbivore", 
+                                "G1_Predator", "G2_Predator")),
+    Type = case_when(
+      Population %in% c("MC", "FN", "HF") ~ "Cool-site origin",
+      Population %in% c("DC", "SP", "SC") ~ "Warm-site origin"
+    ),
+    Type = factor(Type),
+    Predation = factor(Predation)
+  )
 
 # Calculate SMR
 respiration_data <- respiration_data %>%
   dplyr::mutate(SMR = Logger_Pro_Calcd / Mass)  # units are uLCO2/min/g
+
+# Print data structure for verification
+print("Respiration data structure after preparation:")
+print(str(respiration_data))
+print("\nUnique values in Generation column:")
+print(table(respiration_data$Generation))
+print("\nUnique values in Treatment column:")
+print(table(respiration_data$Treatment))
+print("\nUnique values in Type column:")
+print(table(respiration_data$Type))
 
 ### Analysis ----
 
@@ -797,7 +825,7 @@ ggplot(respiration_data, aes(x = Temp, y = SMR, group = Treatment, color = Treat
     G[2]~Predator
   )) +
   scale_x_discrete(labels = c("25°C", "30°C")) +
-  facet_wrap(~factor(Type, levels = c("Behavior", "Physiology")), 
+  facet_wrap(~factor(Type, levels = c("Cool-site origin", "Warm-site origin")), 
              ncol = 1) +
   theme_light() +
   theme(
@@ -847,3 +875,233 @@ ggplot(respiration_data, aes(x = Temp, y = SMR, group = Treatment, color = Treat
     x = "Temperature (°C)",
     y = expression(paste("Mass-specific metabolic rate (", mu, "L ", CO[2], "/min/g)")))
 
+
+
+# Effect Size Comparisons ----
+
+# Run Temperatures.R first to generate env_changes and mi_results_14day objects
+
+#' Calculate generational trait changes
+#' @param data Dataset containing trait measurements
+#' @param trait_col Name of the trait column
+#' @return Dataframe of trait changes between G1 and G2
+calc_trait_changes <- function(data, trait_col) {
+  result <- data %>%
+    mutate(
+      Generation = factor(Generation, levels = c("G1", "G2"))
+    ) %>%
+    group_by(Population, Type, Predation) %>%
+    summarise(
+      g1_trait = mean(get(trait_col)[Generation == "G1"], na.rm = TRUE),
+      g2_trait = mean(get(trait_col)[Generation == "G2"], na.rm = TRUE),
+      n_g1 = sum(Generation == "G1"),
+      n_g2 = sum(Generation == "G2"),
+      var_g1 = if(sum(Generation == "G1") > 1) 
+                 var(get(trait_col)[Generation == "G1"], na.rm = TRUE) 
+               else NA_real_,
+      var_g2 = if(sum(Generation == "G2") > 1) 
+                 var(get(trait_col)[Generation == "G2"], na.rm = TRUE) 
+               else NA_real_,
+      trait_change = g2_trait - g1_trait,
+      .groups = 'drop'
+    ) %>%
+    filter(!is.na(trait_change))
+  
+  return(result)
+}
+
+# Prepare behavior data
+behavior_changes <- behavior_data %>%
+  rename(Predation = Predation.Treatment) %>%
+  mutate(
+    Generation = factor(Generation, levels = c("G1", "G2")),
+    Type = factor(Type),
+    Predation = factor(Predation)
+  ) %>%
+  calc_trait_changes("Y_centered")
+
+#' Calculate predation effect sizes
+#' @param changes Dataframe of trait changes
+#' @param effect_name Name for the effect type
+#' @return Dataframe of standardized effect sizes
+calc_predation_effects <- function(changes, effect_name) {
+  changes %>%
+    group_by(Type) %>%
+    summarise(
+      pred_effect = case_when(
+        Type == "Cool-site origin" ~ mean(trait_change[Predation == "Predator"], na.rm = TRUE),
+        Type == "Warm-site origin" ~ mean(trait_change[Predation == "Predator"], na.rm = TRUE) - 
+                                    mean(trait_change[Predation == "Herbivore"], na.rm = TRUE)
+      ),
+      n_pred = sum(Predation == "Predator"),
+      n_herb = sum(Predation == "Herbivore"),
+      var_pred = if(sum(Predation == "Predator") > 1) 
+                   var(trait_change[Predation == "Predator"], na.rm = TRUE) 
+                 else NA_real_,
+      var_herb = case_when(
+        Type == "Cool-site origin" ~ 0,
+        Type == "Warm-site origin" & sum(Predation == "Herbivore") > 1 ~ 
+          var(trait_change[Predation == "Herbivore"], na.rm = TRUE),
+        TRUE ~ NA_real_
+      ),
+      pooled_var = case_when(
+        Type == "Cool-site origin" & n_pred >= 2 ~ var_pred/n_pred,
+        Type == "Warm-site origin" & n_pred >= 2 & n_herb >= 1 ~ 
+          (var_pred/n_pred + var_herb/n_herb),
+        TRUE ~ NA_real_
+      ),
+      SE = sqrt(pmax(pooled_var, 0)),
+      std_effect = if_else(!is.na(pooled_var) & pooled_var > 0,
+                          pred_effect/sqrt(pooled_var),
+                          NA_real_),
+      effect_type = effect_name,
+      .groups = 'drop'
+    )
+}
+
+#' Calculate environmental effects (CV, autocorrelation, and MI)
+#' @param changes Dataframe of trait changes
+#' @param env_var Environmental variable to correlate with
+#' @param effect_name Name for the effect type
+#' @return Dataframe of standardized effect sizes
+calc_env_effects <- function(changes, env_var, effect_name) {
+  changes %>%
+    left_join(env_changes, by = c("Population" = "Field")) %>%
+    group_by(Type) %>%
+    summarise(
+      pred_effect = {
+        x <- trait_change
+        y <- get(env_var)
+        complete_cases <- !is.na(x) & !is.na(y)
+        x <- x[complete_cases]
+        y <- y[complete_cases]
+        
+        if(length(x) >= 3 && sd(x) > 0 && sd(y) > 0) {
+          if(env_var == "mean_mi") {
+            mean(y, na.rm = TRUE) * 2 - 1
+          } else {
+            cor(x, y)
+          }
+        } else {
+          NA_real_
+        }
+      },
+      n_pred = sum(!is.na(get(env_var)) & !is.na(trait_change)),
+      n_herb = n_pred,
+      pooled_var = case_when(
+        env_var == "mean_mi" ~ if(n_pred >= 3) 1/n_pred else NA_real_,
+        TRUE ~ if(n_pred >= 4) 1/(n_pred - 3) else NA_real_
+      ),
+      SE = sqrt(pmax(pooled_var, 0)),
+      std_effect = case_when(
+        env_var == "mean_mi" ~ pred_effect,
+        !is.na(pred_effect) && !is.na(pooled_var) ~ atanh(pred_effect),
+        TRUE ~ NA_real_
+      ),
+      effect_type = effect_name,
+      .groups = 'drop'
+    )
+}
+
+# Calculate effects
+effects_list <- list(
+  # Predation effects
+  height_pred = calc_predation_effects(behavior_changes, "Predation"),
+  
+  # Temperature CV effects
+  height_cv = calc_env_effects(behavior_changes, "cv_diff", "CV (°C)"),
+  
+  # Temperature autocorrelation effects
+  height_acf = calc_env_effects(behavior_changes, "auto_diff", "Autocorrelation (°C)"),
+  
+  # Mutual Information effects
+  height_mi = calc_env_effects(behavior_changes, "mean_mi", "Mutual Information (°C)")
+)
+
+# Combine effects and set factor levels for proper ordering
+combined_effects <- bind_rows(effects_list) %>%
+  filter(!is.na(std_effect), !is.na(SE)) %>%
+  mutate(effect_type = factor(effect_type, 
+                             levels = c("Predation",
+                                      "CV (°C)",
+                                      "Autocorrelation (°C)",
+                                      "Mutual Information (°C)")))
+
+# Create forest plot
+plot_effects <- function(data) {
+  ggplot(data, aes(y = effect_type, x = std_effect, color = Type)) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_point(position = position_dodge(width = 0.5), size = 3) +
+    geom_errorbarh(aes(xmin = std_effect - 1.96*SE, 
+                      xmax = std_effect + 1.96*SE),
+                  position = position_dodge(width = 0.5),
+                  height = 0.2) +
+    scale_color_manual(values = c("Cool-site origin" = "#5D74A5FF", 
+                                "Warm-site origin" = "#A8554EFF")) +
+    theme_light() +
+    labs(x = "Standardized Effect Size",
+         y = NULL) +
+    theme(legend.position = "right")
+}
+
+# Create and display plot
+height_plot <- plot_effects(combined_effects)
+print(height_plot)
+
+# Correlation Assessment ----
+
+# Calculate correlations between trait changes and environmental variables
+trait_env_correlations <- behavior_changes %>%
+  left_join(env_changes, by = c("Population" = "Field")) %>%
+  group_by(Type) %>%
+  summarise(
+    # CV correlations
+    cv_cor = cor(trait_change, cv_diff, use = "complete.obs"),
+    cv_n = sum(complete.cases(trait_change, cv_diff)),
+    cv_p = cor.test(trait_change, cv_diff, use = "complete.obs")$p.value,
+    
+    # Autocorrelation correlations
+    acf_cor = cor(trait_change, auto_diff, use = "complete.obs"),
+    acf_n = sum(complete.cases(trait_change, auto_diff)),
+    acf_p = cor.test(trait_change, auto_diff, use = "complete.obs")$p.value,
+    
+    # Mutual Information correlations
+    mi_cor = cor(trait_change, mean_mi, use = "complete.obs"),
+    mi_n = sum(complete.cases(trait_change, mean_mi)),
+    mi_p = cor.test(trait_change, mean_mi, use = "complete.obs")$p.value,
+    .groups = 'drop'
+  )
+
+# Print correlation results
+print("\nCorrelation Results:")
+print(trait_env_correlations)
+
+# Create correlation plots
+cv_plot <- ggplot(behavior_changes %>% 
+                    left_join(env_changes, by = c("Population" = "Field")),
+                  aes(x = cv_diff, y = trait_change, color = Type)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Change in CV", y = "Trait Change") +
+  theme_light()
+
+acf_plot <- ggplot(behavior_changes %>% 
+                     left_join(env_changes, by = c("Population" = "Field")),
+                   aes(x = auto_diff, y = trait_change, color = Type)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Change in Autocorrelation", y = "Trait Change") +
+  theme_light()
+
+mi_plot <- ggplot(behavior_changes %>% 
+                    left_join(env_changes, by = c("Population" = "Field")),
+                  aes(x = mean_mi, y = trait_change, color = Type)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Mutual Information", y = "Trait Change") +
+  theme_light()
+
+# Display correlation plots
+print(cv_plot)
+print(acf_plot)
+print(mi_plot)
