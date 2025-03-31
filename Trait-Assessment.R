@@ -1,5 +1,6 @@
-# Sommer et al 
-# Update title
+# Trait assessments
+
+# Sommer et al (in review)
 
 
 # Behavior ----
@@ -64,14 +65,14 @@ behavior_data <- behavior_data %>%
     TRUE ~ as.character(Generation)
   ))
 
-# Create the combined treatment column
+# Create a combined treatment column
 behavior_data <- behavior_data %>%
   mutate(Treatment = paste(Generation, Predation.Treatment, sep = "_")) %>%
   mutate(Treatment = factor(Treatment, 
                             levels = c("G1_Herbivore", "G2_Herbivore", 
                                        "G1_Predator", "G2_Predator")))
 
-# Create 'type' column, sensu Baker 2022 data
+# Create 'type' column, sensu Baker 2025 results
 behavior_data <- behavior_data %>%
   mutate(Type = case_when(
     Population %in% c("MC", "FN", "HF") ~ "Cool-site origin",
@@ -118,7 +119,7 @@ selected_comparisons <- behavior_tukey$Treatment[c(
   "G2_Predator-G2_Herbivore"  #H2 vs P2
 ), ]
 
-# Print results
+
 print("Selected Treatment Comparisons for Cool-site origin Type:")
 print(selected_comparisons)
 
@@ -138,7 +139,7 @@ selected_comparisons <- physiology_tukey$Treatment[c(
   "G2_Predator-G2_Herbivore"  #H2 vs P2
 ), ]
 
-# Print results
+
 print("Selected Treatment Comparisons for Warm-site origin Type:")
 print(selected_comparisons)
 
@@ -157,13 +158,13 @@ selected_comparisons_all <- all_data_tukey$Treatment[c(
   "G2_Predator-G2_Herbivore" 
 ), ]
 
-# Print results
+
 print("Selected Treatment Comparisons for All Data:")
 print(selected_comparisons_all)
 
 ## Distribution test: Wilcoxon rank-sum test ----
 
-# Update Type labels in the data
+# Update Type labels
 behavior_data <- behavior_data %>%
   mutate(Type = case_when(
     Type == "Behavior" ~ "Cool-site origin",
@@ -277,10 +278,9 @@ compare_distributions <- function(data) {
   return(results)
 }
 
-# Run the comparisons
+# Run comparisons
 wilcox_results <- compare_distributions(behavior_data)
 
-# Display results in a nice format
 print("Distribution Comparison Results:")
 print(knitr::kable(wilcox_results, digits = 3))
 
@@ -290,9 +290,9 @@ print(knitr::kable(wilcox_results, digits = 3))
 
 # Define custom colors
 custom_colors <- c(
-  "#484A5A", "#9fa1ac",  # G1 Herbivore (dark, light) - slate blue
-  "#C69648", "#ddc095",  # G1 Predator (dark, light) - golden
-  "#9BA48C", "#c5cabb",  # G2 Herbivore (dark, light) - sage
+  "#484A5A", "#9fa1ac",  # G1 Herbivore (dark, light) -  blue
+  "#C69648", "#ddc095",  # G1 Predator (dark, light) - yellow
+  "#9BA48C", "#c5cabb",  # G2 Herbivore (dark, light) - green
   "#6B4E71", "#a895ad"   # G2 Predator (dark, light) - purple
 )
 
@@ -304,9 +304,9 @@ treatment_labels <- c(
   "G2_Predator" = "G[2] Predator"
 )
 
-#' Create single panel plot for cool-site/warm-site specific plots
+# Create single panel plot 
 create_single_panel_plot <- function(data, type) {
-  # Calculate means for the plot
+  # Calculate means
   means <- data %>%
     filter(Type == type) %>%
     group_by(Treatment) %>%
@@ -383,7 +383,7 @@ create_single_panel_plot <- function(data, type) {
 }
 
 
-# Create the aggregated plot
+# aggregated plot
 aggregated_plot <- ggplot(behavior_data, aes(x = Treatment, y = Y_centered)) +
     # Violin plots
     geom_violin(
@@ -405,7 +405,7 @@ aggregated_plot <- ggplot(behavior_data, aes(x = Treatment, y = Y_centered)) +
         size = 3,
         color = "black"
     ) +
-    # Add single mean value label per group with background
+    # Add single mean value label
     stat_summary(
         fun = mean,
         geom = "label",
@@ -475,7 +475,7 @@ temperature_plot <- ggplot(behavior_data, aes(x = Nearest_Temperature, y = Y, co
 # Display all plots
 aggregated_plot
 
-# Create the individual plots for cool-site and warm-site origins
+# individual plots for cool-site and warm-site origins
 behavior_plot <- create_single_panel_plot(behavior_data, "Cool-site origin")
 physiology_plot <- create_single_panel_plot(behavior_data, "Warm-site origin")
 
@@ -571,26 +571,6 @@ respiration_data <-cbind(Final_output_all_temps,Respiration_Mass_2023_times2)
 # Fix duplicate columns by selecting the first instance of each column name
 respiration_data <- respiration_data[, !duplicated(names(respiration_data))]
 
-# Append gen 1 herbivores data set:
-Gen1 <- read.csv("Data/UP_Gen_1_Herbivores_2023.csv")
-
-# Check the structure of the new data
-str(Gen1)
-
-# Rename columns in the new data to match respiration_data
-Gen1 <- Gen1 %>%
-  rename(
-    Entry_Order = Entry.Order,
-    Saturated_at_30 = Saturated
-  )
-
-# Ensure the new data has the same columns as respiration_data
-# Select only the columns that exist in respiration_data
-Gen1 <- Gen1 %>%
-  select(names(respiration_data))
-
-# Append the new data to respiration_data
-respiration_data <- rbind(respiration_data, Gen1)
 
 # Check the structure of the updated respiration_data
 str(respiration_data)
@@ -732,7 +712,7 @@ g1h_model <- lmer(SMR ~ Type * Temp_centered + (1 | Individual), data = g1h_data
 
 # G2 Herbivore: Not applicable; no G2 herbivores of behavior
 
-# Print interpretable results for each comparison
+# Print  results for each comparison
 cat("\nG1 Predator - Behavior vs Physiology:\n")
 cat("Main effect of Type:", fixef(g1p_model)["TypePhysiology"], "\n")
 cat("Interaction (difference in slopes):", fixef(g1p_model)["TypePhysiology:Temp_centered"], "\n")

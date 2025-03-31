@@ -1,4 +1,5 @@
 # Temperature data
+# Sommer et al. (in review)
 
 # Load libraries
 library(dplyr)
