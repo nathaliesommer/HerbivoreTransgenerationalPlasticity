@@ -100,54 +100,6 @@ print("Input data summary:")
 print(summary(behavior_data$Y_centered))
 print(table(behavior_data$Treatment))
 
-#' Calculate density estimates and ranges for behavioral data
-#' @param data Dataframe containing Y_centered values and grouping variables
-#' @param min_obs Minimum observations required per group (default 10)
-#' @return Dataframe with core and broad ranges for each group
-calculate_density_ranges <- function(data, min_obs = 10) {
-  data %>%
-    group_by(Treatment, Type) %>%
-    filter(n() >= min_obs) %>%
-    summarize(
-      # Calculate quantiles directly
-      avg_core_low = quantile(Y_centered, probs = 0.25),
-      avg_core_high = quantile(Y_centered, probs = 0.75),
-      avg_broad_low = quantile(Y_centered, probs = 0.025),
-      avg_broad_high = quantile(Y_centered, probs = 0.975),
-      
-      # Mean for positioning
-      Y_centered = mean(Y_centered),
-      .groups = 'drop'
-    )
-}
-
-#' Print diagnostic information for density ranges
-#' @param data The density range data
-print_diagnostic <- function(data) {
-  data %>%
-    group_by(Treatment, Type) %>%
-    summarize(
-      core_range = paste(round(avg_core_low, 1), "to", round(avg_core_high, 1)),
-      core_width = round(avg_core_high - avg_core_low, 1),
-      broad_range = paste(round(avg_broad_low, 1), "to", round(avg_broad_high, 1)),
-      broad_width = round(avg_broad_high - avg_broad_low, 1),
-      mean_height = round(Y_centered, 1)
-    ) %>%
-    print(n = Inf)
-}
-
-# Calculate ranges and print diagnostics
-density_estimate_ranges <- calculate_density_ranges(behavior_data)
-print("\nDensity Range Diagnostics:")
-print_diagnostic(density_estimate_ranges)
-
-# Calculate separate ranges for cool-site and warm-site origins
-density_estimate_ranges_behavior <- density_estimate_ranges %>%
-  filter(Type == "Cool-site origin")
-
-density_estimate_ranges_physiology <- density_estimate_ranges %>%
-  filter(Type == "Warm-site origin")
-
 ### Analysis ----
 
 

@@ -164,21 +164,23 @@ plot_data <- temp_data %>%
 # Create temperature plot
 ggplot(plot_data, aes(x = site_group, y = mean_daily_max)) +
   geom_point(aes(color = interaction(field_group, Year),
+                 shape = field_group,
                  group = interaction(Field, Year)), 
              size = 3, 
-             position = position_dodge(width = 0.3)) +
+             position = position_dodge(width = 0.5)) +
   geom_errorbar(aes(color = interaction(field_group, Year),
                     ymin = mean_daily_max - se, 
-                    ymax = mean_daily_max + se),
-                width = 0.1,
-                position = position_dodge(width = 0.3)) +
+                    ymax = mean_daily_max + se,
+                    group = interaction(Field, Year)),
+                width = 0.2,
+                position = position_dodge(width = 0.5)) +
   geom_text(data = subset(plot_data, Field == "UP"),
             aes(label = paste("Year", ifelse(Year == 2022, "1", "2")),
                 color = interaction(field_group, Year),
                 group = interaction(Field, Year)),
             hjust = -0.5,
             size = 3,
-            position = position_dodge(width = 0.3)) +
+            position = position_dodge(width = 0.5)) +
   scale_color_manual(values = c(
     "northern.2022" = "#5D74A5FF",
     "northern.2023" = "#5D74A5FF",
@@ -186,6 +188,11 @@ ggplot(plot_data, aes(x = site_group, y = mean_daily_max)) +
     "southern.2023" = "#A8554EFF",
     "garden.2022" = "darkgray",
     "garden.2023" = "black"
+  )) +
+  scale_shape_manual(values = c(
+    "northern" = 16,
+    "southern" = 17,
+    "garden" = 15
   )) +
   theme_light() +
   theme(
